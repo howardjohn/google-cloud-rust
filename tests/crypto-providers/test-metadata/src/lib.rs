@@ -13,7 +13,10 @@
 // limitations under the License.
 
 use anyhow::bail;
-use cargo_metadata::{semver::Version, FeatureName, Metadata, MetadataCommand, PackageId};
+use cargo_metadata::{semver::Version, FeatureName, Metadata, MetadataCommand, Node, PackageId};
+
+const RING_VERSION: Version = Version::new(0, 17, 0);
+const AWS_LC_RS_VERSION: Version = Version::new(1, 0, 0);
 
 pub fn has_default_crypto_provider() -> anyhow::Result<()> {
     let metadata = metadata()?;
@@ -25,8 +28,8 @@ pub fn has_default_crypto_provider() -> anyhow::Result<()> {
     if !features.contains(&FeatureName::new("ring".to_string())) {
         bail!("rustls should have ring enabled")
     }
-    let _id = find_dependency(&metadata, "ring", Version::new(0, 17, 0))?;
-    let id = find_dependency(&metadata, "aws-lc-rs", Version::new(1, 0, 0));
+    let _id = find_resolved_dependency(&metadata, "ring", RING_VERSION)?;
+    let id = find_resolved_dependency(&metadata, "aws-lc-rs", AWS_LC_RS_VERSION);
     if id.is_ok() {
         bail!("aws-lc-rs should not be a required dependency")
     }
@@ -36,9 +39,20 @@ pub fn has_default_crypto_provider() -> anyhow::Result<()> {
 // TODO(#4170) - make this function verify that no crypto provided dependency
 //   is linked.
 pub fn no_default_crypto_provider() -> anyhow::Result<()> {
-    let result = has_default_crypto_provider();
-    if result.is_ok() {
-        bail!("default crypto provider found")
+    let metadata = metadata()?;
+    let features = find_reqwest_features(&metadata)?;
+    if features.contains(&FeatureName::new("rustls-tls".to_string())) {
+        bail!("reqwest should **not** have rustls-tls enabled")
+    }
+    let features = find_rustls_features(&metadata)?;
+    if features.contains(&FeatureName::new("ring".to_string())) {
+        bail!("rustls should **not** have ring enabled")
+    }
+    if let Ok(id) = find_resolved_dependency(&metadata, "ring", RING_VERSION) {
+        bail!("ring should **not** be a resolved dependency: {id:?}")
+    }
+    if let Ok(id) = find_resolved_dependency(&metadata, "aws-lc-rs", RING_VERSION) {
+        bail!("aws-lc-rs should **not** be a resolved dependency: {id:?}")
     }
     Ok(())
 }
@@ -56,7 +70,11 @@ fn find_rustls_features(metadata: &Metadata) -> anyhow::Result<Vec<FeatureName>>
     find_dependency_features(metadata, "rustls", Version::new(0, 23, 0))
 }
 
-fn find_dependency(metadata: &Metadata, name: &str, version: Version) -> anyhow::Result<PackageId> {
+fn find_dependency_id(
+    metadata: &Metadata,
+    name: &str,
+    version: Version,
+) -> anyhow::Result<PackageId> {
     let matches = metadata
         .packages
         .iter()
@@ -75,12 +93,28 @@ fn find_dependency(metadata: &Metadata, name: &str, version: Version) -> anyhow:
     }
 }
 
+fn find_resolved_dependency(
+    metadata: &Metadata,
+    name: &str,
+    version: Version,
+) -> anyhow::Result<Node> {
+    let id = find_dependency_id(metadata, name, version)?;
+    let root = metadata
+        .resolve
+        .as_ref()
+        .expect("metadata has resolved nodes");
+    let Some(node) = root.nodes.iter().find(|n| n.id == id) else {
+        bail!("could not find {name} in resolved dependencies")
+    };
+    Ok(node.clone())
+}
+
 fn find_dependency_features(
     metadata: &Metadata,
     name: &str,
     version: Version,
 ) -> anyhow::Result<Vec<FeatureName>> {
-    let id = find_dependency(metadata, name, version)?;
+    let id = find_dependency_id(metadata, name, version)?;
     let root = metadata
         .resolve
         .as_ref()

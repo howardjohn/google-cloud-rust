@@ -13,7 +13,5 @@
 // limitations under the License.
 
 fn main() -> anyhow::Result<()> {
-    // TODO(#4170) - verify no crypto provider is enabled. Currently
-    // `ring` is always installed, so we cannot enable the test.
-    Ok(())
+    test_metadata::no_default_crypto_provider()
 }
