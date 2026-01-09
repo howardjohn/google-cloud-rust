@@ -69,7 +69,7 @@ mutants.workspace     = true
 [features]
 default                 = ["default-crypto-provider"]
 idtoken                 = ["jsonwebtoken"]
-default-crypto-provider = ["rustls/ring", "reqwest/rustls-tls"]
+default-crypto-provider = ["reqwest/rustls-tls", "rustls/ring"]
 
 [lints]
 workspace = true
