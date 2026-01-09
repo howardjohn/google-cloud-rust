@@ -71,7 +71,9 @@ rpc.workspace               = true
 wkt.workspace               = true
 
 [features]
-unstable-stream = ["reqwest/stream"]
+default                 = ["default-crypto-provider"]
+default-crypto-provider = ["google-cloud-auth/default-crypto-provider"]
+unstable-stream         = ["reqwest/stream"]
 
 [dev-dependencies]
 anyhow.workspace            = true
